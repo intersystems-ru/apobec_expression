@@ -1,0 +1,238 @@
+/// 
+/// Class for the analysis of distribution of APOBEC mutations 
+/// relative both to the gene expression and replication timing
+/// 
+Class ApobecExp.ExpressionRT [ Abstract ]
+{
+
+/// Function calculates number of TCW motifs
+/// in expression&replication timing bins
+ClassMethod GetExpRTTCW()
+{
+	//kill ^expRTTCW
+	for i = 1:1:^cancerType
+	{
+		set cancer = ^cancerType(i)
+		set cellline = ^cancerTypeRTCellLines(cancer)		
+		set sample = $order(^mutation(cancer,""))
+		while (sample '= "")
+		{
+			if ($data(^expRTTCW(cancer,sample,0,0)) '= 0)
+			{
+				write cancer," ",sample," Done",!
+				set sample = $order(^mutation(cancer,sample))
+				continue
+			}
+			for j = 0:1:7
+			{
+				for k = -2:1:^expBins 
+				{
+					set ^expRTTCW(cancer,sample,j,k) = 0 
+				}
+			}
+			set chr = $order(^TCWinGenes(""))
+			while (chr '= "")
+			{
+				set cnt = 0
+				set pos = $order(^TCWinGenes(chr,""))
+				while (pos '= "")
+				{
+					set maxexp = ..GetMaxExpression(cancer,sample,chr,pos)
+					set expbin = ..GetExpressionBin(maxexp) 
+					
+					set rtbin = ..GetRTbin(cellline,chr,pos) 
+
+					set ^expRTTCW(cancer,sample,rtbin,expbin) = ^expRTTCW(cancer,sample,rtbin,expbin) + 1
+					set cnt = cnt + 1
+									
+					set pos = $order(^TCWinGenes(chr,pos))
+				}
+				write chr," ",cnt,!
+				set chr = $order(^TCWinGenes(chr))
+			}
+			
+			write cancer," ",sample,!
+			set sample = $order(^mutation(cancer,sample))
+		}
+	}
+}
+
+/// Function calculates number of bases
+/// in expression&replication timing bins
+ClassMethod GetExpRTAll()
+{
+	//kill ^expRTAll
+	
+	for i = 1:1:^cancerType
+	{
+		set cancer = ^cancerType(i)
+		set cellline = ^cancerTypeRTCellLines(cancer)				
+		set sample = $order(^mutation(cancer,""))
+		while (sample '= "")
+		{
+			if (sample '= "TCGA-BT-A3PH-01A")
+			{
+				set sample = $order(^mutation(cancer,sample))
+				continue
+			}
+			
+			/*
+			if ($data(^expRTAll(cancer,sample,0,0)) '= 0)
+			{
+				write cancer," ",sample," Done",!
+				set sample = $order(^mutation(cancer,sample))
+				continue
+			}	*/
+			for j = 0:1:7
+			{			
+				for k = -2:1:7 
+				{
+					set ^expRTAll(cancer,sample,j,k) = 0 
+				}	
+			}
+			
+			write "Overlapped part",!
+			set chr = $order(^geneOverlap(""))
+			while (chr '= "")
+			{
+				set pos = $order(^geneOverlap(chr,""))
+				while (pos '= "")
+				{
+					set maxexp = ..GetMaxExpression(cancer,sample,chr,pos)
+					set expbin = ..GetExpressionBin(maxexp) 
+					
+										
+					set rtbin = ..GetRTbin(cellline,chr,pos) 
+					set ^expRTAll(cancer,sample,rtbin,expbin) = ^expRTAll(cancer,sample,rtbin,expbin) + 1										
+					set pos = $order(^geneOverlap(chr,pos))
+				}
+				set chr = $order(^geneOverlap(chr))
+			}		
+							
+
+		    write "Interval part",!				
+			set chr = $order(^geneNonoverlap(""))
+			while (chr '= "")
+			{
+				set startpos = $order(^geneNonoverlap(chr,""))
+				while (startpos '= "")				
+				{
+					/*if ((startpos '= 20105372) && (startpos '= 131265454)) {
+						set startpos = $order(^geneNonoverlap(chr,startpos))
+						continue
+					}*/
+					set endpos = $order(^geneNonoverlap(chr,startpos,""))
+					while (endpos '= "")
+					{
+						//write "gene=",startpos,",",endpos,!
+						set pos = startpos
+						set maxexp = ..GetMaxExpression(cancer,sample,chr,pos)
+						set expbin = ..GetExpressionBin(maxexp) 
+						write "expbin=",expbin,!
+						while (pos <= endpos)
+						{
+							set rtval = ..GetRTval(cellline,chr,pos)
+							//write "rtval=",rtval,!
+							if (rtval '= "")
+							{
+								set rtbin = ..GetRTbin(cellline,chr,pos)
+								set iend = $listget(..GetRTInterval(cellline,chr,pos),2)
+								if (endpos < iend) 
+								{
+									set iend = endpos 
+								}
+ 								set ^expRTAll(cancer,sample,rtbin,expbin) = ^expRTAll(cancer,sample,rtbin,expbin) + (iend - pos + 1)
+								//write "rtbin=",rtbin,!
+								//write "iend=",iend,!
+							}
+							else
+							{
+								set iend = $order(^RT(cellline,chr,pos))
+								if ((iend = "") || (endpos < iend)) 
+								{
+									set iend = endpos 
+								}
+								else 
+								{	
+									set iend = iend - 1	
+								}									
+ 								set ^expRTAll(cancer,sample,0,expbin) = ^expRTAll(cancer,sample,0,expbin) + (iend - pos + 1)
+								//write "rtbin=0",!
+								//write "iend=",iend,!
+							}
+							set pos = iend + 1
+						}
+						set endpos = $order(^geneNonoverlap(chr,startpos,endpos))
+					}
+					set startpos = $order(^geneNonoverlap(chr,startpos))
+				}
+				set chr = $order(^geneNonoverlap(chr))
+			}
+
+			write cancer," ",sample,!					
+			set sample = $order(^mutation(cancer,sample))
+		}
+	}
+}
+
+/// Function calculates number of APOBEC and other mutations
+/// relative to expression&replication timing bins 
+ClassMethod GetRTExpMutation()
+{
+	kill ^resultsAPOBEC
+	kill ^resultsOther
+	for i = 1:1:^cancerType
+	{
+		set cnt = 0
+		set cancer = ^cancerType(i)
+		set cellline = ^cancerTypeRTCellLines(cancer)
+		set sample = $order(^mutation(cancer,""))
+		while (sample '= "")
+		{
+			//if (sample '= "TCGA-05-4395-01A") {
+			//				set sample = $order(^mutation(cancer,sample))
+			//	continue }
+			
+			for j = 0:1:7
+			{
+				for k = -2:1:^expBins 
+				{
+					set ^resultsAPOBEC(cancer,sample,j,k) = 0 
+					set ^resultsOther(cancer,sample,j,k) = 0
+				}
+			} 
+			set chr = $order(^mutation(cancer,sample,""))
+			while (chr '= "")
+			{
+				set pos = $order(^mutation(cancer,sample,chr,""))
+				while (pos '= "")
+				{
+				  	set isAPOBEC = $listget(^mutation(cancer,sample,chr,pos),3)
+
+					set maxexp = ..GetMaxExpression(cancer,sample,chr,pos)
+					set expbin = ..GetExpressionBin(maxexp)
+					
+					set RTbin = ..GetRTbin(cellline,chr,pos) 
+					
+				
+					if (isAPOBEC = 1) {
+						set ^resultsAPOBEC(cancer,sample,RTbin,expbin) = ^resultsAPOBEC(cancer,sample,RTbin,expbin) + 1 }
+					else {
+						set ^resultsOther(cancer,sample,RTbin,expbin) = ^resultsOther(cancer,sample,RTbin,expbin) + 1 }
+				
+				
+				//if ( (RTbin=1) && (expbin=4) ) {
+				//write isAPOBEC,cancer,sample,"chr=",chr,",pos=",pos,",rtbin=",RTbin,",expbin=",expbin,! }									
+					set cnt = cnt + 1	
+
+					set pos = $order(^mutation(cancer,sample,chr,pos))
+				}
+				set chr = $order(^mutation(cancer,sample,chr))
+			}
+			set sample = $order(^mutation(cancer,sample))
+		}
+		write cancer,"=",cnt,!
+	}
+}
+
+}
